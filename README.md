@@ -1,97 +1,165 @@
-# DeepScan — Setup Guide
+# DeepScan — AI Deepfake Detection System
 
-## Architecture
+A deepfake and AI-generated image/video detector using a 3-model ensemble.
+Colab runs the backend, Render hosts the frontend.
+
+---
+
+## Models Used
+
+| Model | Type | Notes |
+|-------|------|-------|
+| Your ResNet50 | Custom trained | 97.61% val accuracy |
+| umm-maybe/AI-image-detector | HuggingFace | General AI image detector |
+| Organika/sdxl-detector | HuggingFace | SDXL-focused detector |
+
+All 3 predictions are averaged equally (33% each) for the final ensemble verdict.
+
+---
+
+## Project Structure
+
 ```
-[Your Browser] → [Render: index.html] → [ngrok tunnel] → [Colab: Flask API + Your Model]
+backend_colab.ipynb   → Colab notebook (Flask API + your model)
+index.html            → Frontend (deploy on Render)
+render.yaml           → Render static site config
+README.md             → This file
 ```
 
 ---
 
-## PART 1 — Colab Backend
+## Setup Guide
 
-### Step 1 — Get a free ngrok account
-1. Go to https://ngrok.com → Sign up free
-2. Dashboard → Copy your **Authtoken**
+### Part 1 — Colab Backend
 
-### Step 2 — Open the notebook
+#### Step 1 — Get ngrok token
+1. Go to https://ngrok.com and sign up free
+2. Dashboard → Copy your Authtoken
+
+#### Step 2 — Open notebook
 1. Upload `backend_colab.ipynb` to Google Colab
-2. Set Runtime → **T4 GPU** (Runtime → Change runtime type)
+2. Set Runtime → Change runtime type → **T4 GPU**
 
-### Step 3 — Run each cell in order
+#### Step 3 — Run cells in order
 
-**Cell 1** — Installs Flask, ngrok, torch etc.
-- Paste your ngrok token where it says `YOUR_TOKEN_HERE`
+| Cell | What it does | Edit needed? |
+|------|-------------|--------------|
+| Cell 1 | Installs all dependencies | Paste your ngrok token |
+| Cell 2 | Upload your .pt/.pth model | No |
+| Cell 3 | Loads your ResNet50 model | No — preconfigured |
+| Cell 4 | Loads 2 HuggingFace models | No |
+| Cell 5 | Ensemble detection helpers | No |
+| Cell 6 | Starts Flask + ngrok tunnel | No |
 
-**Cell 2** — Upload your `.pt` / `.pth` model file when prompted
+#### Step 4 — Copy your API URL
+After Cell 6 runs you will see:
+```
+=======================================================
+  API URL:  https://xxxx.ngrok-free.app
+=======================================================
+```
+Copy this URL — you need it for the frontend.
 
-**Cell 3** — run cell
-
-**Cell 4** — Detection logic (no edits needed unless your output format differs)
-
-**Cell 5** — Starts the Flask server + ngrok tunnel
-- You will see a URL like: `https://xxxx.ngrok-free.app`
-- **Copy this URL** — you need it for the frontend
-
-### API Endpoints
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | /health | Check if server is alive |
-| POST | /detect | Detect image (field: `file`) |
-| POST | /detect_video | Detect video (field: `video`) |
-| GET | /analytics | Get cumulative stats |
+> Keep Cell 6 running at all times. Stopping it kills the API.
+> Every time you restart Colab you get a new ngrok URL.
 
 ---
 
-## PART 2 — Render Frontend
+### Part 2 — Render Frontend
 
-### Step 1 — Create a GitHub repo
-1. Create a new repo (public or private)
-2. Upload these two files:
-   - `index.html`
-   - `render.yaml`
+#### Step 1 — Push to GitHub
+Create a new GitHub repo and upload:
+- `index.html`
+- `render.yaml`
 
-### Step 2 — Deploy on Render
+#### Step 2 — Deploy on Render
 1. Go to https://render.com → New → Static Site
 2. Connect your GitHub repo
 3. Settings:
-   - **Build Command:** `echo "No build needed"`
-   - **Publish Directory:** `.`
+   - Build Command: `echo "No build needed"`
+   - Publish Directory: `.`
 4. Click Deploy
 5. Render gives you a URL like `https://deepscan-xxx.onrender.com`
 
-### Step 3 — Connect frontend to backend
-1. Open your Render URL in the browser
-2. Paste your **ngrok URL** into the API URL box at the top
-3. Click **Connect** — the status dot turns green ✓
+#### Step 3 — Connect to backend
+1. Open your Render URL
+2. Paste your ngrok URL into the API URL box
+3. Click Connect — status dot turns green
 
 ---
 
-## Usage
+## API Endpoints
 
-### Image Detection
-1. Click the **Image** tab
-2. Drop or select an image (JPG/PNG/WEBP)
-3. Click **Analyse Image**
-4. See verdict, confidence scores, and probability charts
+| Method | Endpoint | Field | Description |
+|--------|----------|-------|-------------|
+| GET | /health | — | Check server status |
+| POST | /detect | `file` | Detect image |
+| POST | /detect_video | `video` | Detect video |
+| GET | /analytics | — | Get cumulative stats |
 
-### Video Detection
-1. Click the **Video** tab
-2. Drop or select a video (MP4/AVI/MOV)
-3. Click **Analyse Video**
-4. See verdict, AI frame ratio, and timeline chart
+---
 
-### Analytics
-1. Click the **Analytics** tab
-2. See cumulative stats for all detections this session
+## Detection Output
+
+### Image
+```json
+{
+  "verdict": "AI GENERATED",
+  "confidence": 0.823,
+  "ai_probability": 0.823,
+  "real_probability": 0.177,
+  "per_model": {
+    "Your Model":        { "ai_probability": 0.91, "real_probability": 0.09, "verdict": "AI GENERATED" },
+    "AI-Image-Detector": { "ai_probability": 0.79, "real_probability": 0.21, "verdict": "AI GENERATED" },
+    "SDXL-Detector":     { "ai_probability": 0.77, "real_probability": 0.23, "verdict": "AI GENERATED" }
+  }
+}
+```
+
+### Video
+```json
+{
+  "verdict": "LIKELY DEEPFAKE",
+  "ai_frame_ratio": 0.73,
+  "avg_ai_prob": 0.81,
+  "total_frames_sampled": 24,
+  "timeline": [0.82, 0.79, 0.91, ...],
+  "per_model_avg": {
+    "Your Model":        { "avg_ai_probability": 0.88, "avg_real_probability": 0.12 },
+    "AI-Image-Detector": { "avg_ai_probability": 0.76, "avg_real_probability": 0.24 },
+    "SDXL-Detector":     { "avg_ai_probability": 0.79, "avg_real_probability": 0.21 }
+  }
+}
+```
+
+---
+
+## Verdict Logic
+
+| Condition | Verdict |
+|-----------|---------|
+| Ensemble AI prob >= 75% | AI GENERATED |
+| Ensemble Real prob >= 75% | REAL IMAGE |
+| Neither above 75% | UNCERTAIN |
+| Video AI frame ratio > 40% | LIKELY DEEPFAKE |
+| Video AI frame ratio <= 40% | LIKELY REAL |
+
+---
+
+## Limits
+
+| Type | Max size |
+|------|----------|
+| Image | 10 MB |
+| Video | 100 MB |
+
+Video is sampled every 30th frame to keep inference fast.
 
 ---
 
 ## Important Notes
 
-- **ngrok URL changes every session** — each time you restart Colab,
-  you get a new URL. Just paste the new one in the frontend.
-- **Keep Cell 5 running** — stopping it kills the API server.
-- **Free ngrok** allows 1 tunnel and has a request rate limit. For
-  production use, upgrade ngrok or use a paid hosting solution.
-- **Model cell (Cell 3)** must be edited to match your exact architecture
-  before running — otherwise the state_dict load will fail.
+- Free ngrok allows 1 tunnel at a time
+- ngrok URL changes every Colab session — update it in the frontend
+- GPU (T4) is strongly recommended — CPU inference is very slow
+- The Flask development server warning is normal and harmless
