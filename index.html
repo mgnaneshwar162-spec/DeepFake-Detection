@@ -463,7 +463,10 @@ async function checkHealth() {
   dot.className = 'status-dot';
   txt.textContent = 'checking…';
   try {
-    const r = await fetch(BACKEND + '/health', { signal: AbortSignal.timeout(8000) });
+    const r = await fetch(BACKEND + '/health', {
+    signal: AbortSignal.timeout(8000),
+    headers: { 'ngrok-skip-browser-warning': 'true' }
+  });
     const d = await r.json();
     if (d.status === 'ok') {
       dot.className = 'status-dot online';
@@ -550,7 +553,11 @@ async function detect(kind) {
   const endpoint = kind === 'image' ? '/detect' : '/detect_video';
 
   try {
-    const res = await fetch(BACKEND + endpoint, { method: 'POST', body: fd });
+    const res = await fetch(BACKEND + endpoint, {
+    method: 'POST',
+    body: fd,
+    headers: { 'ngrok-skip-browser-warning': 'true' }
+  });
     const data = await res.json();
     if (data.error) throw new Error(data.error);
     kind === 'image' ? renderImageResult(out, data) : renderVideoResult(out, data);
@@ -726,7 +733,9 @@ function renderVideoResult(container, d) {
 async function loadAnalytics() {
   if (!BACKEND) return;
   try {
-    const r = await fetch(BACKEND + '/analytics');
+    const r = await fetch(BACKEND + '/analytics', {
+    headers: { 'ngrok-skip-browser-warning': 'true' }
+  });
     const d = await r.json();
     renderAnalytics(d);
   } catch { toast('Could not load analytics', 'error'); }
