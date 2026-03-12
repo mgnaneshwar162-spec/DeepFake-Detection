@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepScan — AI Deepfake Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+  /* ─── TOKENS ─── */
+  :root {
+    --bg:        #060910;
+    --surface:   #0d1117;
+    --card:      #111827;
+    --border:    #1f2937;
+    --accent:    #00e5ff;
+    --accent2:   #7c3aed;
+    --danger:    #ff3b5c;
+    --safe:      #00e676;
+    --warn:      #ffb300;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── GRID BACKGROUND ─── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── HEADER ─── */
+  header {
+    position: relative; z-index: 10;
+    padding: 28px 48px;
+    display: flex; align-items: center; justify-content: space-between;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(0,229,255,.04) 0%, transparent 100%);
+  }
+
+  .logo {
+    font-family: var(--font-head);
+    font-size: 1.6rem; font-weight: 800;
+    letter-spacing: -.02em;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+
+  .logo span { font-weight: 400; opacity: .7; }
+
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: .75rem; color: var(--muted);
+  }
+
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background .3s;
+  }
+  .status-dot.online { background: var(--safe); box-shadow: 0 0 8px var(--safe); }
+  .status-dot.error  { background: var(--danger); }
+
+  nav { display: flex; gap: 4px; }
+  .nav-btn {
+    padding: 7px 18px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: .8rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all .2s;
+  }
+  .nav-btn.active, .nav-btn:hover {
+    background: var(--card); border-color: var(--border);
+    color: var(--text);
+  }
+  .nav-btn.active { color: var(--accent); border-color: rgba(0,229,255,.3); }
+
+  /* ─── MAIN ─── */
+  main {
+    position: relative; z-index: 1;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 48px 24px 80px;
+  }
+
+  .page { display: none; }
+  .page.active { display: block; animation: fadeIn .35s ease; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+  /* ─── CONFIG BANNER ─── */
+  .config-banner {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px;
+    background: linear-gradient(135deg, rgba(124,58,237,.12), rgba(0,229,255,.08));
+    border: 1px solid rgba(0,229,255,.2);
+    border-radius: 10px;
+    margin-bottom: 36px;
+    font-size: .85rem;
+  }
+  .config-banner input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 14px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: .82rem;
+    outline: none;
+    transition: border-color .2s;
+  }
+  .config-banner input:focus { border-color: var(--accent); }
+  .config-banner input::placeholder { color: var(--muted); }
+  .save-btn {
+    padding: 8px 18px;
+    background: var(--accent2);
+    border: none; border-radius: 6px;
+    color: #fff; font-family: var(--font-mono);
+    font-size: .82rem; cursor: pointer;
+    transition: opacity .2s;
+  }
+  .save-btn:hover { opacity: .85; }
+
+  /* ─── UPLOAD ZONE ─── */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 14px;
+    padding: 52px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .25s;
+    background: var(--card);
+    position: relative;
+    overflow: hidden;
+  }
+  .upload-zone::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 50% 0%, rgba(0,229,255,.06), transparent 70%);
+    pointer-events: none;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(0,229,255,.04); }
+  .upload-zone .icon { font-size: 2.8rem; margin-bottom: 12px; }
+  .upload-zone h3 { font-family: var(--font-head); font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }
+  .upload-zone p  { color: var(--muted); font-size: .82rem; }
+  .upload-zone input[type=file] { display: none; }
+
+  .preview-wrap { margin-top: 20px; display: none; }
+  .preview-wrap img, .preview-wrap video {
+    max-width: 100%; max-height: 280px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    object-fit: contain;
+  }
+
+  /* ─── DETECT BUTTON ─── */
+  .detect-btn {
+    display: block; width: 100%;
+    margin-top: 20px; padding: 15px;
+    background: linear-gradient(135deg, var(--accent2), #5b21b6);
+    border: none; border-radius: 10px;
+    color: #fff; font-family: var(--font-head);
+    font-size: 1rem; font-weight: 700;
+    letter-spacing: .04em;
+    cursor: pointer;
+    transition: transform .15s, box-shadow .15s;
+    position: relative; overflow: hidden;
+  }
+  .detect-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(124,58,237,.5); }
+  .detect-btn:active { transform: none; }
+  .detect-btn:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ─── PROGRESS ─── */
+  .progress-bar {
+    height: 3px; background: var(--border);
+    border-radius: 3px; margin-top: 16px;
+    overflow: hidden; display: none;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent2), var(--accent));
+    border-radius: 3px;
+    animation: prog 1.6s ease-in-out infinite;
+  }
+  @keyframes prog {
+    0%   { width: 0%;   margin-left: 0; }
+    50%  { width: 70%;  margin-left: 15%; }
+    100% { width: 0%;   margin-left: 100%; }
+  }
+
+  /* ─── RESULT CARD ─── */
+  .result-card {
+    margin-top: 28px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    animation: fadeIn .4s ease;
+  }
+
+  .result-header {
+    padding: 18px 24px;
+    display: flex; align-items: center; gap: 14px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(135deg, rgba(124,58,237,.08), transparent);
+  }
+
+  .verdict-badge {
+    padding: 8px 18px;
+    border-radius: 8px;
+    font-family: var(--font-head);
+    font-size: 1.1rem; font-weight: 800;
+    letter-spacing: .04em;
+    white-space: nowrap;
+  }
+  .badge-ai       { background: rgba(255,59,92,.15); color: #ff3b5c; border: 1.5px solid #ff3b5c; }
+  .badge-real     { background: rgba(0,230,118,.12); color: #00e676; border: 1.5px solid #00e676; }
+  .badge-uncertain{ background: rgba(255,179,0,.12);  color: #ffb300; border: 1.5px solid #ffb300; }
+  .badge-deepfake { background: rgba(255,59,92,.15); color: #ff3b5c; border: 1.5px solid #f97316; }
+
+  .result-meta { color: var(--muted); font-size: .82rem; line-height: 1.7; }
+  .result-meta strong { color: var(--text); }
+
+  .result-body {
+    padding: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .chart-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .chart-box h4 {
+    font-family: var(--font-head);
+    font-size: .85rem; font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    margin-bottom: 12px;
+  }
+  .chart-box canvas { max-height: 200px; }
+
+  /* ─── SCORE BAR ─── */
+  .score-row { display: flex; align-items: center; gap: 10px; margin: 8px 0; font-size: .82rem; }
+  .score-label { width: 90px; color: var(--muted); }
+  .score-track { flex: 1; height: 8px; background: var(--border); border-radius: 8px; overflow: hidden; }
+  .score-fill  { height: 100%; border-radius: 8px; transition: width .8s cubic-bezier(.4,0,.2,1); }
+  .score-val   { width: 44px; text-align: right; font-size: .78rem; color: var(--text); }
+
+  /* ─── FRAME GRID ─── */
+  .frame-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 8px; margin-top: 8px;
+  }
+  .frame-item { text-align: center; font-size: .72rem; color: var(--muted); }
+  .frame-item img {
+    width: 100%; height: 72px; object-fit: cover;
+    border-radius: 6px; border: 2px solid;
+    display: block; margin-bottom: 4px;
+  }
+
+  /* ─── TIMELINE ─── */
+  .timeline-wrap { padding: 24px; }
+  .timeline-wrap canvas { max-height: 180px; width: 100% !important; }
+
+  /* ─── ANALYTICS PAGE ─── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 14px; margin-bottom: 32px;
+  }
+  .stat-tile {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 18px;
+    text-align: center;
+  }
+  .stat-tile .num {
+    font-family: var(--font-head);
+    font-size: 2.2rem; font-weight: 800;
+    line-height: 1;
+  }
+  .stat-tile .lbl { color: var(--muted); font-size: .78rem; margin-top: 6px; }
+
+  /* ─── FOOTER ─── */
+  footer {
+    position: relative; z-index: 1;
+    text-align: center; padding: 24px;
+    color: var(--muted); font-size: .75rem;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ─── TOAST ─── */
+  .toast {
+    position: fixed; bottom: 28px; right: 28px;
+    padding: 12px 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: .82rem;
+    transform: translateY(80px); opacity: 0;
+    transition: all .3s;
+    z-index: 999;
+    max-width: 320px;
+  }
+  .toast.show { transform: none; opacity: 1; }
+  .toast.error { border-color: var(--danger); color: var(--danger); }
+  .toast.success { border-color: var(--safe); color: var(--safe); }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 640px) {
+    header { padding: 16px 20px; flex-wrap: wrap; gap: 10px; }
+    main { padding: 28px 16px 60px; }
+    .result-body { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">Deep<span>Scan</span></div>
+  <nav>
+    <button class="nav-btn active" onclick="showPage('image')">Image</button>
+    <button class="nav-btn" onclick="showPage('video')">Video</button>
+    <button class="nav-btn" onclick="showPage('analytics', true)">Analytics</button>
+  </nav>
+  <div class="status-pill">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">disconnected</span>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main>
+
+  <!-- CONFIG BANNER -->
+  <div class="config-banner">
+    <span style="color:var(--accent);white-space:nowrap">⚙ API URL</span>
+    <input type="text" id="backendUrl" placeholder="Paste your ngrok URL here — e.g. https://xxxx.ngrok-free.app">
+    <button class="save-btn" onclick="saveUrl()">Connect</button>
+  </div>
+
+  <!-- ── IMAGE PAGE ── -->
+  <div class="page active" id="page-image">
+    <div class="upload-zone" id="imageZone" onclick="document.getElementById('imageFile').click()"
+         ondragover="onDrag(event,'imageZone')" ondragleave="offDrag('imageZone')" ondrop="onDrop(event,'image')">
+      <input type="file" id="imageFile" accept="image/*" onchange="previewFile('image')">
+      <div class="icon">🖼</div>
+      <h3>Drop an image or click to browse</h3>
+      <p>JPG · PNG · WEBP · BMP — max 10 MB</p>
+      <div class="preview-wrap" id="imagePreviewWrap">
+        <img id="imagePreview" alt="Preview">
+      </div>
+    </div>
+
+    <button class="detect-btn" id="imageBtn" onclick="detect('image')" disabled>
+      Analyse Image
+    </button>
+    <div class="progress-bar" id="imageProgress"><div class="fill"></div></div>
+    <div id="imageResult"></div>
+  </div>
+
+  <!-- ── VIDEO PAGE ── -->
+  <div class="page" id="page-video">
+    <div class="upload-zone" id="videoZone" onclick="document.getElementById('videoFile').click()"
+         ondragover="onDrag(event,'videoZone')" ondragleave="offDrag('videoZone')" ondrop="onDrop(event,'video')">
+      <input type="file" id="videoFile" accept="video/*" onchange="previewFile('video')">
+      <div class="icon">🎬</div>
+      <h3>Drop a video or click to browse</h3>
+      <p>MP4 · AVI · MOV · MKV — max 100 MB</p>
+      <div class="preview-wrap" id="videoPreviewWrap">
+        <video id="videoPreview" controls></video>
+      </div>
+    </div>
+
+    <button class="detect-btn" id="videoBtn" onclick="detect('video')" disabled>
+      Analyse Video
+    </button>
+    <div class="progress-bar" id="videoProgress"><div class="fill"></div></div>
+    <div id="videoResult"></div>
+  </div>
+
+  <!-- ── ANALYTICS PAGE ── -->
+  <div class="page" id="page-analytics">
+    <div class="stats-grid" id="statsGrid">
+      <div class="stat-tile"><div class="num" style="color:var(--muted)">—</div><div class="lbl">Loading...</div></div>
+    </div>
+    <div class="chart-box" style="max-width:380px">
+      <h4>Breakdown</h4>
+      <canvas id="analyticsChart"></canvas>
+    </div>
+  </div>
+
+</main>
+
+<footer>DeepScan · Powered by your custom PyTorch model · Colab + Render</footer>
+
+<div class="toast" id="toast"></div>
+
+<!-- ══ SCRIPTS ══ -->
+<script>
+// ──────────────────────────────────────────
+// State
+// ──────────────────────────────────────────
+let BACKEND = localStorage.getItem('deepscan_url') || '';
+const charts = {};
+
+if (BACKEND) {
+  document.getElementById('backendUrl').value = BACKEND;
+  checkHealth();
+}
+
+// ──────────────────────────────────────────
+// URL / Health
+// ──────────────────────────────────────────
+function saveUrl() {
+  BACKEND = document.getElementById('backendUrl').value.trim().replace(/\/$/, '');
+  if (!BACKEND) return toast('Enter a valid URL', 'error');
+  localStorage.setItem('deepscan_url', BACKEND);
+  checkHealth();
+}
+
+async function checkHealth() {
+  const dot  = document.getElementById('statusDot');
+  const txt  = document.getElementById('statusText');
+  dot.className = 'status-dot';
+  txt.textContent = 'checking…';
+  try {
+    const r = await fetch(BACKEND + '/health', { signal: AbortSignal.timeout(8000) });
+    const d = await r.json();
+    if (d.status === 'ok') {
+      dot.className = 'status-dot online';
+      txt.textContent = `online · ${d.device}`;
+      toast('Connected to backend ✓', 'success');
+    } else { throw new Error(); }
+  } catch {
+    dot.className = 'status-dot error';
+    txt.textContent = 'offline';
+    toast('Cannot reach backend — check your ngrok URL', 'error');
+  }
+}
+
+// ──────────────────────────────────────────
+// Navigation
+// ──────────────────────────────────────────
+function showPage(name, fetch_=false) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (fetch_) loadAnalytics();
+}
+
+// ──────────────────────────────────────────
+// File handling
+// ──────────────────────────────────────────
+function previewFile(kind) {
+  const input = document.getElementById(kind + 'File');
+  const file  = input.files[0];
+  if (!file) return;
+
+  if (kind === 'image') {
+    const r = new FileReader();
+    r.onload = e => {
+      const img = document.getElementById('imagePreview');
+      img.src = e.target.result;
+      document.getElementById('imagePreviewWrap').style.display = 'block';
+    };
+    r.readAsDataURL(file);
+  } else {
+    const url = URL.createObjectURL(file);
+    document.getElementById('videoPreview').src = url;
+    document.getElementById('videoPreviewWrap').style.display = 'block';
+  }
+
+  document.getElementById(kind + 'Btn').disabled = false;
+}
+
+function onDrag(e, id) { e.preventDefault(); document.getElementById(id).classList.add('drag'); }
+function offDrag(id)    { document.getElementById(id).classList.remove('drag'); }
+function onDrop(e, kind) {
+  e.preventDefault();
+  offDrag(kind + 'Zone');
+  const dt = e.dataTransfer;
+  if (!dt.files.length) return;
+  const input = document.getElementById(kind + 'File');
+  // Manually assign the dropped file
+  const container = new DataTransfer();
+  container.items.add(dt.files[0]);
+  input.files = container.files;
+  previewFile(kind);
+}
+
+// ──────────────────────────────────────────
+// Detection
+// ──────────────────────────────────────────
+async function detect(kind) {
+  if (!BACKEND) return toast('Set the API URL first', 'error');
+  const fileInput = document.getElementById(kind + 'File');
+  if (!fileInput.files.length) return toast('Select a file first', 'error');
+
+  const btn  = document.getElementById(kind + 'Btn');
+  const prog = document.getElementById(kind + 'Progress');
+  const out  = document.getElementById(kind + 'Result');
+
+  btn.disabled = true;
+  prog.style.display = 'block';
+  out.innerHTML = '';
+
+  const fd = new FormData();
+  const field = kind === 'image' ? 'file' : 'video';
+  fd.append(field, fileInput.files[0]);
+  const endpoint = kind === 'image' ? '/detect' : '/detect_video';
+
+  try {
+    const res = await fetch(BACKEND + endpoint, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    kind === 'image' ? renderImageResult(out, data) : renderVideoResult(out, data);
+  } catch (e) {
+    toast(e.message || 'Request failed', 'error');
+  } finally {
+    btn.disabled = false;
+    prog.style.display = 'none';
+  }
+}
+
+// ──────────────────────────────────────────
+// Render helpers
+// ──────────────────────────────────────────
+function verdictClass(v) {
+  if (v === 'AI GENERATED' || v === 'LIKELY DEEPFAKE') return 'badge-ai';
+  if (v === 'REAL IMAGE'   || v === 'LIKELY REAL')     return 'badge-real';
+  return 'badge-uncertain';
+}
+
+function scoreBar(label, value, color) {
+  const pct = Math.round(value * 100);
+  return `<div class="score-row">
+    <span class="score-label">${label}</span>
+    <div class="score-track"><div class="score-fill" style="width:${pct}%;background:${color}"></div></div>
+    <span class="score-val">${pct}%</span>
+  </div>`;
+}
+
+function renderImageResult(container, d) {
+  const vc = verdictClass(d.verdict);
+  const uid = 'c' + Date.now();
+
+  // Build per-model table rows
+  let modelRows = '';
+  if (d.per_model) {
+    for (const [name, r] of Object.entries(d.per_model)) {
+      const mvc = verdictClass(r.verdict);
+      modelRows += `<tr>
+        <td style="color:var(--text);font-weight:600">${name}</td>
+        <td>${(r.ai_probability * 100).toFixed(1)}%</td>
+        <td>${(r.real_probability * 100).toFixed(1)}%</td>
+        <td><span class="verdict-badge ${mvc}" style="font-size:.72rem;padding:3px 10px">${r.verdict}</span></td>
+      </tr>`;
+    }
+  }
+
+  container.innerHTML = `
+  <div class="result-card">
+    <div class="result-header">
+      <div class="verdict-badge ${vc}">${d.verdict}</div>
+      <div class="result-meta">
+        Ensemble confidence <strong>${(d.confidence * 100).toFixed(1)}%</strong><br>
+        AI prob <strong>${(d.ai_probability * 100).toFixed(1)}%</strong> ·
+        Real prob <strong>${(d.real_probability * 100).toFixed(1)}%</strong>
+      </div>
+    </div>
+    <div class="result-body">
+      <div class="chart-box" style="grid-column:1/-1">
+        <h4>Per-model breakdown</h4>
+        <table class="df-tbl">
+          <tr>
+            <th>Model</th><th>AI Prob</th><th>Real Prob</th><th>Verdict</th>
+          </tr>
+          ${modelRows}
+          <tr style="border-top:2px solid var(--accent2)">
+            <td style="color:var(--accent);font-weight:700">ENSEMBLE</td>
+            <td style="color:var(--danger);font-weight:700">${(d.ai_probability*100).toFixed(1)}%</td>
+            <td style="color:var(--safe);font-weight:700">${(d.real_probability*100).toFixed(1)}%</td>
+            <td><span class="verdict-badge ${vc}" style="font-size:.72rem;padding:3px 10px">${d.verdict}</span></td>
+          </tr>
+        </table>
+      </div>
+      <div class="chart-box">
+        <h4>Ensemble confidence bars</h4>
+        ${scoreBar('AI', d.ai_probability, 'var(--danger)')}
+        ${scoreBar('Real', d.real_probability, 'var(--safe)')}
+      </div>
+      <div class="chart-box">
+        <h4>Distribution</h4>
+        <canvas id="${uid}"></canvas>
+      </div>
+    </div>
+  </div>`;
+
+  // Pie chart
+  if (charts[uid]) charts[uid].destroy();
+  charts[uid] = new Chart(document.getElementById(uid), {
+    type: 'doughnut',
+    data: {
+      labels: ['AI Generated', 'Real'],
+      datasets: [{ data: [d.ai_probability, d.real_probability],
+        backgroundColor: ['rgba(255,59,92,.7)', 'rgba(0,230,118,.7)'],
+        borderColor: ['#ff3b5c', '#00e676'], borderWidth: 2 }]
+    },
+    options: { plugins: { legend: { labels: { color: '#e2e8f0', font: { family: 'JetBrains Mono', size: 11 } } } },
+               cutout: '62%' }
+  });
+}
+
+function renderVideoResult(container, d) {
+  const vc = verdictClass(d.verdict);
+  const uid = 'v' + Date.now();
+
+  let modelRows = '';
+  if (d.per_model_avg) {
+    for (const [name, r] of Object.entries(d.per_model_avg)) {
+      modelRows += `<tr>
+        <td style="color:var(--text);font-weight:600">${name}</td>
+        <td>${(r.avg_ai_probability * 100).toFixed(1)}%</td>
+        <td>${(r.avg_real_probability * 100).toFixed(1)}%</td>
+      </tr>`;
+    }
+  }
+
+  container.innerHTML = `
+  <div class="result-card">
+    <div class="result-header">
+      <div class="verdict-badge ${vc}">${d.verdict}</div>
+      <div class="result-meta">
+        Ensemble AI frame ratio <strong>${(d.ai_frame_ratio * 100).toFixed(1)}%</strong><br>
+        Avg AI prob <strong>${d.avg_ai_prob !== undefined ? (d.avg_ai_prob * 100).toFixed(1) + '%' : '—'}</strong> ·
+        Frames sampled <strong>${d.total_frames_sampled ?? d.timeline.length}</strong>
+      </div>
+    </div>
+    <div class="result-body">
+      ${modelRows ? `<div class="chart-box" style="grid-column:1/-1">
+        <h4>Per-model average (across all sampled frames)</h4>
+        <table class="df-tbl">
+          <tr><th>Model</th><th>Avg AI Prob</th><th>Avg Real Prob</th></tr>
+          ${modelRows}
+        </table>
+      </div>` : ''}
+    </div>
+    <div class="timeline-wrap">
+      <div class="chart-box">
+        <h4>Ensemble AI Probability — per frame</h4>
+        <canvas id="${uid}"></canvas>
+      </div>
+    </div>
+  </div>`;
+
+  if (charts[uid]) charts[uid].destroy();
+  charts[uid] = new Chart(document.getElementById(uid), {
+    type: 'line',
+    data: {
+      labels: d.timeline.map((_, i) => `#${i + 1}`),
+      datasets: [{
+        label: 'AI probability',
+        data: d.timeline,
+        borderColor: '#7c3aed', backgroundColor: 'rgba(124,58,237,.15)',
+        borderWidth: 2, pointRadius: 3, fill: true, tension: .35,
+      }, {
+        label: 'Threshold 0.6',
+        data: Array(d.timeline.length).fill(0.6),
+        borderColor: '#ff3b5c', borderWidth: 1,
+        borderDash: [6, 4], pointRadius: 0,
+      }]
+    },
+    options: {
+      scales: {
+        y: { min: 0, max: 1, grid: { color: '#1f2937' }, ticks: { color: '#64748b' } },
+        x: { grid: { color: '#1f2937' }, ticks: { color: '#64748b', maxTicksLimit: 10 } }
+      },
+      plugins: { legend: { labels: { color: '#e2e8f0', font: { family: 'JetBrains Mono', size: 11 } } } }
+    }
+  });
+}
+
+// ──────────────────────────────────────────
+// Analytics
+// ──────────────────────────────────────────
+async function loadAnalytics() {
+  if (!BACKEND) return;
+  try {
+    const r = await fetch(BACKEND + '/analytics');
+    const d = await r.json();
+    renderAnalytics(d);
+  } catch { toast('Could not load analytics', 'error'); }
+}
+
+function renderAnalytics(d) {
+  const grid = document.getElementById('statsGrid');
+  const tiles = [
+    { key: 'total_images',   label: 'Images scanned', color: 'var(--accent)' },
+    { key: 'total_videos',   label: 'Videos scanned', color: 'var(--accent2)' },
+    { key: 'AI GENERATED',   label: 'AI Generated',   color: 'var(--danger)' },
+    { key: 'REAL IMAGE',     label: 'Real Images',     color: 'var(--safe)' },
+    { key: 'UNCERTAIN',      label: 'Uncertain',       color: 'var(--warn)' },
+    { key: 'LIKELY DEEPFAKE',label: 'Deepfakes',       color: '#f97316' },
+    { key: 'LIKELY REAL',    label: 'Real Videos',     color: '#3b82f6' },
+  ];
+  grid.innerHTML = tiles.map(t => `
+    <div class="stat-tile">
+      <div class="num" style="color:${t.color}">${d[t.key] ?? 0}</div>
+      <div class="lbl">${t.label}</div>
+    </div>`).join('');
+
+  const labels = ['AI Generated', 'Real Image', 'Uncertain', 'Deepfake', 'Real Video'];
+  const keys   = ['AI GENERATED', 'REAL IMAGE', 'UNCERTAIN', 'LIKELY DEEPFAKE', 'LIKELY REAL'];
+  const vals   = keys.map(k => d[k] ?? 0);
+  const colors = ['rgba(255,59,92,.7)','rgba(0,230,118,.7)','rgba(255,179,0,.7)','rgba(249,115,22,.7)','rgba(59,130,246,.7)'];
+
+  const ctx = document.getElementById('analyticsChart');
+  if (charts['analytics']) charts['analytics'].destroy();
+  charts['analytics'] = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: vals,
+        backgroundColor: colors,
+        borderColor: colors.map(c => c.replace('.7', '1')),
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      plugins: { legend: { position: 'bottom', labels: { color: '#e2e8f0', font: { family: 'JetBrains Mono', size: 11 }, padding: 14 } } },
+      cutout: '58%',
+    }
+  });
+}
+
+// ──────────────────────────────────────────
+// Toast
+// ──────────────────────────────────────────
+let toastTimer;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast ${type} show`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+}
+</script>
+</body>
+</html>
